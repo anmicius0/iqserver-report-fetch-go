@@ -4,19 +4,19 @@ package client
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/rs/zerolog"
 )
 
 // Client holds the HTTP client configuration and logger.
 type Client struct {
 	baseURL string
-	logger  *slog.Logger
+	logger  zerolog.Logger
 	http    *resty.Client
 }
 
@@ -105,7 +105,7 @@ type ViolationRow struct {
 // Client Initialization
 // =================================================================
 
-func NewClient(serverURL, username, password string, logger *slog.Logger) (*Client, error) {
+func NewClient(serverURL, username, password string, logger zerolog.Logger) (*Client, error) {
 	// Defense checks
 	if strings.TrimSpace(serverURL) == "" {
 		return nil, fmt.Errorf("serverURL is required")
@@ -116,9 +116,7 @@ func NewClient(serverURL, username, password string, logger *slog.Logger) (*Clie
 	if password == "" {
 		return nil, fmt.Errorf("password is required")
 	}
-	if logger == nil {
-		return nil, fmt.Errorf("logger is required")
-	}
+	// The logger is a struct, so it cannot be nil. No check needed.
 
 	// Expect serverURL to already include /api/v2
 	baseURL := strings.TrimSuffix(serverURL, "/")
@@ -138,19 +136,19 @@ func NewClient(serverURL, username, password string, logger *slog.Logger) (*Clie
 
 	// Resty hooks for logging
 	r.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
-		logger.Debug("Executing request",
-			"method", req.Method,
-			"url", req.URL,
-			"query", req.QueryParam.Encode(),
-		)
+		logger.Debug().
+			Str("method", req.Method).
+			Str("url", req.URL).
+			Str("query", req.QueryParam.Encode()).
+			Msg("Executing request")
 		return nil
 	})
 	r.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-		logger.Debug("Request completed",
-			"status", resp.StatusCode(),
-			"url", resp.Request.URL,
-			"method", resp.Request.Method,
-		)
+		logger.Debug().
+			Int("status", resp.StatusCode()).
+			Str("url", resp.Request.URL).
+			Str("method", resp.Request.Method).
+			Msg("Request completed")
 		return nil
 	})
 
@@ -159,7 +157,7 @@ func NewClient(serverURL, username, password string, logger *slog.Logger) (*Clie
 		logger:  logger,
 		http:    r,
 	}
-	logger.Info("Initialized IQServer API client", "baseURL", baseURL)
+	logger.Info().Str("baseURL", baseURL).Msg("Initialized IQServer API client")
 	return cl, nil
 }
 
@@ -170,12 +168,15 @@ func NewClient(serverURL, username, password string, logger *slog.Logger) (*Clie
 // GetApplications fetches a list of applications, optionally filtered by organization ID.
 func (c *Client) GetApplications(ctx context.Context, orgID *string) ([]Application, error) {
 	endpoint := "applications"
+	logCtx := c.logger.With()
 	if orgID != nil && *orgID != "" {
 		endpoint = fmt.Sprintf("applications/organization/%s", *orgID)
-		c.logger.Debug("Fetching applications", "orgId", *orgID)
+		logCtx = logCtx.Str("orgId", *orgID)
 	} else {
-		c.logger.Debug("Fetching applications", "orgId", "all")
+		logCtx = logCtx.Str("orgId", "all")
 	}
+	logger := logCtx.Logger()
+	logger.Debug().Msg("Fetching applications")
 
 	var env applicationsEnvelope
 	resp, err := c.http.R().
@@ -187,14 +188,14 @@ func (c *Client) GetApplications(ctx context.Context, orgID *string) ([]Applicat
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	c.logger.Debug("raw response", "status", resp.StatusCode(), "body", resp.String())
+	c.logger.Debug().Int("status", resp.StatusCode()).Str("body", resp.String()).Msg("raw response")
 	if resp.IsError() {
-		c.logger.Error("Failed to fetch applications from API",
-			"endpoint", endpoint,
-			"status", resp.StatusCode(),
-			"statusText", resp.Status(),
-			"rawBodySnippet", strings.TrimSpace(resp.String()),
-		)
+		c.logger.Error().
+			Str("endpoint", endpoint).
+			Int("status", resp.StatusCode()).
+			Str("statusText", resp.Status()).
+			Str("rawBodySnippet", strings.TrimSpace(resp.String())).
+			Msg("Failed to fetch applications from API")
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode(), resp.String())
 	}
 
@@ -214,27 +215,27 @@ func (c *Client) GetLatestReportInfo(ctx context.Context, appID string) (*Report
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	if resp.IsError() {
-		c.logger.Error("Failed to fetch latest report info",
-			"appID", appID,
-			"status", resp.StatusCode(),
-			"statusText", resp.Status(),
-		)
+		c.logger.Error().
+			Str("appID", appID).
+			Int("status", resp.StatusCode()).
+			Str("statusText", resp.Status()).
+			Msg("Failed to fetch latest report info")
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode(), resp.Status())
 	}
 
 	if len(reports) > 0 {
-		c.logger.Debug("Found reports", "count", len(reports), "appId", appID)
+		c.logger.Debug().Int("count", len(reports)).Str("appId", appID).Msg("Found reports")
 		r := reports[0]
 		return &r, nil
 	}
 
-	c.logger.Debug("No reports found", "appId", appID)
+	c.logger.Debug().Str("appId", appID).Msg("No reports found")
 	return nil, nil
 }
 
 // GetPolicyViolations fetches the detailed policy violation report for a specific application and report ID.
 func (c *Client) GetPolicyViolations(ctx context.Context, publicID, reportID, orgName string) ([]ViolationRow, error) {
-	c.logger.Debug("Fetching policy violations", "publicId", publicID, "reportId", reportID)
+	c.logger.Debug().Str("publicId", publicID).Str("reportId", reportID).Msg("Fetching policy violations")
 
 	endpoint := fmt.Sprintf("applications/%s/reports/%s/policy", publicID, reportID)
 	params := url.Values{"includeViolationTimes": []string{"true"}}
@@ -249,11 +250,11 @@ func (c *Client) GetPolicyViolations(ctx context.Context, publicID, reportID, or
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	if resp.IsError() {
-		c.logger.Error("Failed to fetch policy violations report",
-			"publicId", publicID,
-			"reportId", reportID,
-			"status", resp.StatusCode(),
-		)
+		c.logger.Error().
+			Str("publicId", publicID).
+			Str("reportId", reportID).
+			Int("status", resp.StatusCode()).
+			Msg("Failed to fetch policy violations report")
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode(), resp.Status())
 	}
 
@@ -263,7 +264,7 @@ func (c *Client) GetPolicyViolations(ctx context.Context, publicID, reportID, or
 
 // GetOrganizations fetches the list of all organizations.
 func (c *Client) GetOrganizations(ctx context.Context) ([]Organization, error) {
-	c.logger.Debug("Fetching organizations")
+	c.logger.Debug().Msg("Fetching organizations")
 
 	var env organizationsEnvelope
 	resp, err := c.http.R().
@@ -277,7 +278,7 @@ func (c *Client) GetOrganizations(ctx context.Context) ([]Organization, error) {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode(), resp.String())
 	}
 
-	c.logger.Debug("Retrieved organizations", "count", len(env.Organizations))
+	c.logger.Debug().Int("count", len(env.Organizations)).Msg("Retrieved organizations")
 	return env.Organizations, nil
 }
 

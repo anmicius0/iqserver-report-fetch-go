@@ -3,9 +3,12 @@ package report
 
 import (
 	"encoding/csv"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestWriteCSV_WritesHeaderAndRows(t *testing.T) {
@@ -37,7 +40,8 @@ func TestWriteCSV_WritesHeaderAndRows(t *testing.T) {
 		},
 	}
 
-	if err := WriteCSV(dest, rows, nil); err != nil {
+	logger := zerolog.New(io.Discard)
+	if err := WriteCSV(dest, rows, logger); err != nil {
 		t.Fatalf("WriteCSV error = %v", err)
 	}
 

@@ -4,7 +4,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,13 +11,14 @@ import (
 	"github.com/anmicius0/iqserver-report-fetch-go/internal/client"
 	"github.com/anmicius0/iqserver-report-fetch-go/internal/config"
 	"github.com/anmicius0/iqserver-report-fetch-go/internal/report"
+	"github.com/rs/zerolog"
 )
 
 // IQReportService orchestrates fetching data and exporting CSV reports.
 type IQReportService struct {
 	cfg    *config.Config
 	cl     *client.Client
-	logger *slog.Logger
+	logger zerolog.Logger
 }
 
 // AppReportResult holds the violation rows and any error encountered
@@ -29,14 +29,19 @@ type AppReportResult struct {
 }
 
 // NewIQReportService constructs a new service.
-func NewIQReportService(cfg *config.Config, cl *client.Client, logger *slog.Logger) *IQReportService {
+func NewIQReportService(cfg *config.Config, cl *client.Client, logger zerolog.Logger) *IQReportService {
 	return &IQReportService{cfg: cfg, cl: cl, logger: logger}
 }
 
 // GenerateLatestPolicyReport fetches latest policy violations for applications (optionally filtered by orgID)
 // and writes a CSV to cfg.OutputDir/filename. It returns the absolute file path.
 func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID *string, filename string) (string, error) {
-	s.logger.Info("GenerateLatestPolicyReport invoked", "orgID", orgID, "filename", filename)
+	logger := s.logger.With().Str("filename", filename).Logger()
+	if orgID != nil {
+		logger = logger.With().Str("orgID", *orgID).Logger()
+	}
+
+	logger.Info().Msg("GenerateLatestPolicyReport invoked")
 
 	// =================================================================
 	// 1. APPLICATION AND ORGANIZATION FETCHING (Sequential Setup)
@@ -45,27 +50,27 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 	// Fetch application list
 	apps, err := s.cl.GetApplications(ctx, orgID)
 	if err != nil {
-		s.logger.Error("failed to retrieve application list", "orgID", orgID, "err", err)
+		logger.Error().Err(err).Msg("failed to retrieve application list")
 		return "", fmt.Errorf("get applications: %w", err)
 	}
-	s.logger.Info("Fetched applications", "count", len(apps))
+	logger.Info().Int("count", len(apps)).Msg("Fetched applications")
 
 	if len(apps) == 0 {
-		s.logger.Warn("Task finished: no applications found matching criteria", "orgID", orgID)
+		logger.Warn().Msg("Task finished: no applications found matching criteria")
 		return "", fmt.Errorf("no applications found")
 	}
 
 	// Fetch organizations to create an ID-to-name map
 	orgs, err := s.cl.GetOrganizations(ctx)
 	if err != nil {
-		s.logger.Error("failed to retrieve organization list", "err", err)
+		logger.Error().Err(err).Msg("failed to retrieve organization list")
 		return "", fmt.Errorf("get organizations: %w", err)
 	}
 	orgIDToName := make(map[string]string)
 	for _, org := range orgs {
 		orgIDToName[org.ID] = org.Name
 	}
-	s.logger.Info("Created organization ID-to-name map", "count", len(orgIDToName))
+	logger.Info().Int("count", len(orgIDToName)).Msg("Created organization ID-to-name map")
 
 	// =================================================================
 	// 2. PROCESS APPLICATIONS CONCURRENTLY
@@ -76,7 +81,7 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 	resultsChan := make(chan AppReportResult, len(apps))
 	var wg sync.WaitGroup
 
-	s.logger.Info("Starting concurrent report fetching for applications", "appsToProcess", len(apps), "maxConcurrent", 10)
+	s.logger.Info().Int("appsToProcess", len(apps)).Int("maxConcurrent", 10).Msg("Starting concurrent report fetching for applications")
 
 	// Launch a goroutine for each application
 	for _, a := range apps {
@@ -98,7 +103,7 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 				return
 			}
 
-			appLogger := s.logger.With("appPublicID", app.PublicID, "appInternalID", app.ID)
+			appLogger := s.logger.With().Str("appPublicID", app.PublicID).Str("appInternalID", app.ID).Logger()
 
 			// 2a. Fetch latest report info
 			reportInfo, err := s.cl.GetLatestReportInfo(ctx, app.ID)
@@ -109,7 +114,7 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 
 			// Skip if no report available
 			if reportInfo == nil || strings.TrimSpace(reportInfo.ReportHTMLURL) == "" {
-				appLogger.Info("No recent report found for application, skipping")
+				appLogger.Info().Msg("No recent report found for application, skipping")
 				resultsChan <- AppReportResult{}
 				return
 			}
@@ -120,13 +125,13 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 				resultsChan <- AppReportResult{Err: fmt.Errorf("cannot parse report id from %q", reportInfo.ReportHTMLURL)}
 				return
 			}
-			appLogger.Debug("Parsed report ID", "reportID", reportID, "stage", reportInfo.Stage)
+			appLogger.Debug().Str("reportID", reportID).Str("stage", reportInfo.Stage).Msg("Parsed report ID")
 
 			// 2c. Look up organization name
 			orgName, ok := orgIDToName[app.OrganizationID]
 			if !ok {
 				orgName = app.OrganizationID
-				appLogger.Warn("organization name not found, using ID as fallback", "orgID", app.OrganizationID)
+				appLogger.Warn().Str("orgID", app.OrganizationID).Msg("organization name not found, using ID as fallback")
 			}
 
 			// 2d. Fetch policy violations (Returns []client.ViolationRow)
@@ -135,7 +140,7 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 				resultsChan <- AppReportResult{Err: fmt.Errorf("policy violations for %s: %w", app.PublicID, err)}
 				return
 			}
-			appLogger.Debug("Fetched policy violations", "rowsCount", len(clientRows))
+			appLogger.Debug().Int("rowsCount", len(clientRows)).Msg("Fetched policy violations")
 
 			// 2e. Convert client rows to report rows (report.Row is the expected output type)
 			reportRows := make([]report.Row, len(clientRows))
@@ -180,13 +185,13 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 	// =================================================================
 
 	target := filepath.Join(s.cfg.OutputDir, filename)
-	s.logger.Info("Writing CSV report", "path", target, "totalRows", len(allViolationRows))
+	s.logger.Info().Str("path", target).Int("totalRows", len(allViolationRows)).Msg("Writing CSV report")
 
 	if err := report.WriteCSV(target, allViolationRows, s.logger); err != nil {
 		return "", fmt.Errorf("write csv: %w", err)
 	}
 
-	s.logger.Info("Report written successfully", "path", target)
+	s.logger.Info().Str("path", target).Msg("Report written successfully")
 
 	return target, nil
 }

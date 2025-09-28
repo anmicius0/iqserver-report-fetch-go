@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,10 +15,11 @@ import (
 
 	"github.com/anmicius0/iqserver-report-fetch-go/internal/client"
 	"github.com/anmicius0/iqserver-report-fetch-go/internal/config"
+	"github.com/rs/zerolog"
 )
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+func testLogger() zerolog.Logger {
+	return zerolog.New(io.Discard)
 }
 
 func TestGenerateLatestPolicyReport_Integration(t *testing.T) {

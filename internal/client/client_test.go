@@ -5,16 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+func newTestLogger() zerolog.Logger {
+	return zerolog.New(io.Discard)
 }
 
 func TestClient_EndToEndAgainstStub(t *testing.T) {
