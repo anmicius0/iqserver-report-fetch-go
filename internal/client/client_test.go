@@ -63,6 +63,9 @@ func TestClient_EndToEndAgainstStub(t *testing.T) {
 				"components": []any{
 					map[string]any{
 						"displayName": "setuptools 80.9.0 (.tar.gz)",
+						"componentIdentifier": map[string]any{
+							"format": "pypi",
+						},
 						"violations": []any{
 							map[string]any{
 								"policyName":        "Security-Medium",
@@ -81,6 +84,9 @@ func TestClient_EndToEndAgainstStub(t *testing.T) {
 					},
 					map[string]any{
 						"displayName": "setuptools (py3-none-any) 80.9.0 (.whl)",
+						"componentIdentifier": map[string]any{
+							"format": "pypi",
+						},
 						"violations": []any{
 							map[string]any{
 								"policyName":        "Security-Medium",
@@ -161,6 +167,12 @@ func TestClient_EndToEndAgainstStub(t *testing.T) {
 	}
 	if violationRows[0].Threat != 7 || violationRows[0].PolicyAction != "Security-7" {
 		t.Errorf("row mapping unexpected: %#v", violationRows[0])
+	}
+	if violationRows[0].Format != "pypi" {
+		t.Errorf("expected format 'pypi', got %q", violationRows[0].Format)
+	}
+	if violationRows[1].Format != "pypi" {
+		t.Errorf("expected format 'pypi', got %q", violationRows[1].Format)
 	}
 
 	// Orgs

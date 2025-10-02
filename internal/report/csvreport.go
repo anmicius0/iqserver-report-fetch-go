@@ -16,6 +16,7 @@ type Row struct {
 	Application    string
 	Organization   string
 	Policy         string
+	Format         string
 	Component      string
 	Threat         int
 	PolicyAction   string
@@ -31,6 +32,7 @@ func csvHeaders() []string {
 		"Application",
 		"Organization",
 		"Policy",
+		"Format",
 		"Component",
 		"Threat",
 		"Policy/Action",
@@ -77,6 +79,7 @@ func WriteCSV(path string, rows []Row, logger zerolog.Logger) error {
 			r.Application,
 			r.Organization,
 			r.Policy,
+			r.Format,
 			r.Component,
 			strconv.Itoa(r.Threat),
 			r.PolicyAction,

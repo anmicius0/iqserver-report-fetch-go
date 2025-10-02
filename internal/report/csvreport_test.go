@@ -20,6 +20,7 @@ func TestWriteCSV_WritesHeaderAndRows(t *testing.T) {
 			Application:    "app-1",
 			Organization:   "org-1",
 			Policy:         "Security-Medium",
+			Format:         "pypi",
 			Component:      "comp-1",
 			Threat:         7,
 			PolicyAction:   "Security-7",
@@ -31,6 +32,7 @@ func TestWriteCSV_WritesHeaderAndRows(t *testing.T) {
 			Application:    "app-2",
 			Organization:   "org-1",
 			Policy:         "Security-High",
+			Format:         "golang",
 			Component:      "comp-2",
 			Threat:         9,
 			PolicyAction:   "Security-9",
@@ -63,10 +65,19 @@ func TestWriteCSV_WritesHeaderAndRows(t *testing.T) {
 	if want, got := "No.", records[0][0]; want != got {
 		t.Errorf("header[0] = %q", got)
 	}
+	if want, got := "Format", records[0][4]; want != got {
+		t.Errorf("header[4] = %q, want %q", got, want)
+	}
 	if want, got := "app-1", records[1][1]; want != got {
 		t.Errorf("row1 Application = %q", got)
 	}
-	if want, got := "CVE-2024-0001", records[2][9]; want != got {
+	if want, got := "pypi", records[1][4]; want != got {
+		t.Errorf("row1 Format = %q, want %q", got, want)
+	}
+	if want, got := "golang", records[2][4]; want != got {
+		t.Errorf("row2 Format = %q, want %q", got, want)
+	}
+	if want, got := "CVE-2024-0001", records[2][10]; want != got {
 		t.Errorf("row2 CVE = %q", got)
 	}
 }

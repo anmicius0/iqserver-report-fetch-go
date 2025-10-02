@@ -73,10 +73,15 @@ type Violation struct {
 	Constraints       []Constraint `json:"constraints"`
 }
 
+type ComponentIdentifier struct {
+	Format string `json:"format"`
+}
+
 // Component is a library/asset with associated violations.
 type Component struct {
-	DisplayName string      `json:"displayName"`
-	Violations  []Violation `json:"violations"`
+	DisplayName         string      `json:"displayName"`
+	Violations          []Violation `json:"violations"`
+	ComponentIdentifier `json:"componentIdentifier"`
 }
 
 // PolicyViolationReport is the top-level structure for the policy violations report API.
@@ -93,6 +98,7 @@ type ViolationRow struct {
 	Application    string
 	Organization   string
 	Policy         string
+	Format         string
 	Component      string
 	Threat         int
 	PolicyAction   string
@@ -292,6 +298,7 @@ func parseToViolationRows(rawReport PolicyViolationReport, appPublicID string, o
 
 	for _, comp := range rawReport.Components {
 		compName := comp.DisplayName
+		format := comp.ComponentIdentifier.Format
 		for _, v := range comp.Violations {
 			policyName := v.PolicyName
 			// Threat level comes as float64, cast to int
@@ -307,6 +314,7 @@ func parseToViolationRows(rawReport PolicyViolationReport, appPublicID string, o
 					Application:    appPublicID,
 					Organization:   orgName,
 					Policy:         policyName,
+					Format:         format,
 					Component:      compName,
 					Threat:         threat,
 					PolicyAction:   policyAction,

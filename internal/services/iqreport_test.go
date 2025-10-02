@@ -58,6 +58,9 @@ func TestGenerateLatestPolicyReport_Integration(t *testing.T) {
 			"components": []any{
 				map[string]any{
 					"displayName": "comp-A",
+					"componentIdentifier": map[string]any{
+						"format": "maven",
+					},
 					"violations": []any{
 						map[string]any{
 							"policyName":        "Security-Medium",
@@ -112,11 +115,14 @@ func TestGenerateLatestPolicyReport_Integration(t *testing.T) {
 		t.Fatalf("read csv: %v", err)
 	}
 	content := string(b)
-	if !strings.Contains(content, "No.,Application,Organization,Policy") {
-		t.Errorf("header missing")
+	if !strings.Contains(content, "No.,Application,Organization,Policy,Format") {
+		t.Errorf("header missing or incorrect")
 	}
 	if !strings.Contains(content, "Security-7") {
 		t.Errorf("row content missing")
+	}
+	if !strings.Contains(content, "maven") {
+		t.Errorf("format field 'maven' missing from output")
 	}
 }
 

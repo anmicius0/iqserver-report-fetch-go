@@ -149,6 +149,7 @@ func (s *IQReportService) GenerateLatestPolicyReport(ctx context.Context, orgID 
 					Application:    r.Application,
 					Organization:   r.Organization,
 					Policy:         r.Policy,
+					Format:         r.Format,
 					Component:      r.Component,
 					Threat:         r.Threat,
 					PolicyAction:   r.PolicyAction,
